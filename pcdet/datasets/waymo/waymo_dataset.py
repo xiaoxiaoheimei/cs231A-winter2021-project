@@ -366,10 +366,8 @@ if __name__ == '__main__':
         create_waymo_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
-            #data_path=ROOT_DIR / 'data' / 'waymo',
-            #save_path=ROOT_DIR / 'data' / 'waymo',
-            data_path=ROOT_DIR / 'data' / 'waymo',
-            save_path=ROOT_DIR / 'test_data' / 'waymo',
+            data_path=ROOT_DIR / 'data_source' / 'waymo',
+            save_path=ROOT_DIR / 'data' / 'waymo',
             raw_data_tag='raw_data',
             processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG,
             workers=1
