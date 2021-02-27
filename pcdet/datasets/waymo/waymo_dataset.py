@@ -15,6 +15,7 @@ from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, common_utils
 from ..dataset import DatasetTemplate
 
+import pdb
 
 class WaymoDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
@@ -324,7 +325,7 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
     waymo_infos_train = dataset.get_infos(
         raw_data_path=data_path / raw_data_tag,
         save_path=save_path / processed_data_tag, num_workers=workers, has_label=True,
-        sampled_interval=1
+        sampled_interval=5
     )
     with open(train_filename, 'wb') as f:
         pickle.dump(waymo_infos_train, f)
@@ -334,7 +335,7 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
     waymo_infos_val = dataset.get_infos(
         raw_data_path=data_path / raw_data_tag,
         save_path=save_path / processed_data_tag, num_workers=workers, has_label=True,
-        sampled_interval=1
+        sampled_interval=5
     )
     with open(val_filename, 'wb') as f:
         pickle.dump(waymo_infos_val, f)
@@ -365,8 +366,11 @@ if __name__ == '__main__':
         create_waymo_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
+            #data_path=ROOT_DIR / 'data' / 'waymo',
+            #save_path=ROOT_DIR / 'data' / 'waymo',
             data_path=ROOT_DIR / 'data' / 'waymo',
-            save_path=ROOT_DIR / 'data' / 'waymo',
+            save_path=ROOT_DIR / 'test_data' / 'waymo',
             raw_data_tag='raw_data',
-            processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG
+            processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG,
+            workers=1
         )

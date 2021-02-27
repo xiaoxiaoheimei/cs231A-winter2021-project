@@ -11,6 +11,9 @@ from ...utils import common_utils
 import tensorflow as tf
 from waymo_open_dataset.utils import frame_utils, transform_utils, range_image_utils
 from waymo_open_dataset import dataset_pb2
+import h5py
+
+import pdb
 
 try:
     tf.enable_eager_execution()
@@ -166,11 +169,20 @@ def save_lidar_points(frame, cur_save_path):
 
     np.save(cur_save_path, save_points)
     # print('saving to ', cur_save_path)
+    dir_name, f_name = os.path.split(cur_save_path)
+    f_id, _ = os.path.splitext(f_name)
+    h5_path = os.path.join(dir_name, '{}_image_info.h5'.format(f_id))
+    with h5py.File(h5_path, 'w') as f:
+        for im_id, camera_im in enumerate(frame.images):
+            im = tf.image.decode_jpeg(camera_im.image).numpy()
+            f.create_dataset("image_{}".format(im_id), data=im)
+        f.create_dataset("cp_points", data=np.concatenate(cp_points, axis=0))
     return num_points_of_each_lidar
 
 
 def process_single_sequence(sequence_file, save_path, sampled_interval, has_label=True):
     sequence_name = os.path.splitext(os.path.basename(sequence_file))[0]
+
 
     # print('Load record (sampled_interval=%d): %s' % (sampled_interval, sequence_name))
     if not sequence_file.exists():
