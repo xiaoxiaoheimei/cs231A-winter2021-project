@@ -388,5 +388,4 @@ if __name__ == '__main__':
             save_path=ROOT_DIR / 'data_test' / 'waymo',
             raw_data_tag='raw_data',
             processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG,
-            workers=1
         )
