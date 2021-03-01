@@ -14,6 +14,7 @@ from pathlib import Path
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, common_utils
 from ..dataset import DatasetTemplate
+import h5py
 
 import pdb
 
@@ -103,11 +104,23 @@ class WaymoDataset(DatasetTemplate):
     def get_lidar(self, sequence_name, sample_idx):
         lidar_file = self.data_path / sequence_name / ('%04d.npy' % sample_idx)
         point_features = np.load(lidar_file)  # (N, 7): [x, y, z, intensity, elongation, NLZ_flag]
+        #print("lidar_file:{}, point_feature.shape:{}".format(lidar_file, point_features.shape))
 
         points_all, NLZ_flag = point_features[:, 0:5], point_features[:, 5]
         points_all = points_all[NLZ_flag == -1]
         points_all[:, 3] = np.tanh(points_all[:, 3])
-        return points_all
+        return points_all, NLZ_flag
+
+    def get_images(self, sequence_name, sample_idx, NLZ_flag):
+        image_file = self.data_path / sequence_name / ('%04d_image_info.h5' % sample_idx)
+        image_info = {}
+        with h5py.File(image_file, 'r') as f:
+            image_info['cp_points'] = f['cp_points'][:][NLZ_flag == -1]
+            for image_id in range(5):
+                image_name = 'image_{}'.format(image_id)
+                image_info[image_name] = f[image_name][:]
+        #print("image_file:{}, cp_points.shape:{}".format(image_file, image_info['cp_points'].shape))
+        return image_info
 
     def __len__(self):
         if self._merge_all_iters_to_one_epoch:
@@ -123,12 +136,14 @@ class WaymoDataset(DatasetTemplate):
         pc_info = info['point_cloud']
         sequence_name = pc_info['lidar_sequence']
         sample_idx = pc_info['sample_idx']
-        points = self.get_lidar(sequence_name, sample_idx)
+        points, NLZ_flag = self.get_lidar(sequence_name, sample_idx)
+        image_info = self.get_images(sequence_name, sample_idx, NLZ_flag)
 
         input_dict = {
             'points': points,
             'frame_id': info['frame_id'],
         }
+
 
         if 'annos' in info:
             annos = info['annos']
@@ -144,10 +159,11 @@ class WaymoDataset(DatasetTemplate):
                 'gt_boxes': gt_boxes_lidar,
                 'num_points_in_gt': annos.get('num_points_in_gt', None)
             })
-
+        input_dict = {**input_dict, **image_info}
         data_dict = self.prepare_data(data_dict=input_dict)
         data_dict['metadata'] = info.get('metadata', info['frame_id'])
         data_dict.pop('num_points_in_gt', None)
+        assert data_dict['points'].shape[0] == data_dict['cp_points'].shape[0], '#3D points is not equal to #2D points.'
         return data_dict
 
     @staticmethod
@@ -311,7 +327,7 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
                        raw_data_tag='raw_data', processed_data_tag='waymo_processed_data',
                        workers=multiprocessing.cpu_count()):
     dataset = WaymoDataset(
-        dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path,
+        dataset_cfg=dataset_cfg, class_names=class_names, root_path=save_path,
         training=False, logger=common_utils.create_logger()
     )
     train_split, val_split = 'train', 'val'
@@ -358,6 +374,8 @@ if __name__ == '__main__':
     parser.add_argument('--func', type=str, default='create_waymo_infos', help='')
     args = parser.parse_args()
 
+    pdb.set_trace()
+
     if args.func == 'create_waymo_infos':
         import yaml
         from easydict import EasyDict
@@ -366,8 +384,8 @@ if __name__ == '__main__':
         create_waymo_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
-            data_path=ROOT_DIR / 'data_source' / 'waymo',
-            save_path=ROOT_DIR / 'data' / 'waymo',
+            data_path=ROOT_DIR / 'data_source_test' / 'waymo',
+            save_path=ROOT_DIR / 'data_test' / 'waymo',
             raw_data_tag='raw_data',
             processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG,
             workers=1

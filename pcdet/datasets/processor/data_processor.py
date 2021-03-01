@@ -21,6 +21,7 @@ class DataProcessor(object):
             return partial(self.mask_points_and_boxes_outside_range, config=config)
         mask = common_utils.mask_points_by_range(data_dict['points'], self.point_cloud_range)
         data_dict['points'] = data_dict['points'][mask]
+        data_dict['cp_points'] = data_dict['cp_points'][mask]
         if data_dict.get('gt_boxes', None) is not None and config.REMOVE_OUTSIDE_BOXES and self.training:
             mask = box_utils.mask_boxes_outside_range_numpy(
                 data_dict['gt_boxes'], self.point_cloud_range, min_num_corners=config.get('min_num_corners', 1)
@@ -37,6 +38,7 @@ class DataProcessor(object):
             shuffle_idx = np.random.permutation(points.shape[0])
             points = points[shuffle_idx]
             data_dict['points'] = points
+            data_dict['cp_points'] = data_dict['cp_points'][shuffle_idx]
 
         return data_dict
 

@@ -1,5 +1,5 @@
 DATASET: 'WaymoDataset'
-DATA_PATH: '../data/waymo'
+DATA_PATH: '../data_test/waymo'
 PROCESSED_DATA_TAG: 'waymo_processed_data'
 
 POINT_CLOUD_RANGE: [-75.2, -75.2, -2, 75.2, 75.2, 4]
@@ -15,7 +15,7 @@ SAMPLED_INTERVAL: {
 }
 
 DATA_AUGMENTOR:
-    DISABLE_AUG_LIST: ['placeholder']
+    DISABLE_AUG_LIST: ['placeholder', 'gt_sampling']
     AUG_CONFIG_LIST:
         - NAME: gt_sampling
           USE_ROAD_PLANE: False
