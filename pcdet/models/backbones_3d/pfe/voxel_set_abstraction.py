@@ -5,6 +5,8 @@ from ....ops.pointnet2.pointnet2_stack import pointnet2_modules as pointnet2_sta
 from ....ops.pointnet2.pointnet2_stack import pointnet2_utils as pointnet2_stack_utils
 from ....utils import common_utils
 
+from efficientnet_pytorch import EfficientNet
+
 
 def bilinear_interpolate_torch(im, x, y):
     """
@@ -39,6 +41,42 @@ def bilinear_interpolate_torch(im, x, y):
     ans = torch.t((torch.t(Ia) * wa)) + torch.t(torch.t(Ib) * wb) + torch.t(torch.t(Ic) * wc) + torch.t(torch.t(Id) * wd)
     return ans
 
+class ImageFeatureExtractor(nn.Module):
+    def __init__(self, net_type = 'efficientnet-b7', output_channel=12, dropout_rate=0.2):
+        super(ImageFeatureExtractor, self).__init__()
+        self.eff_net = EfficientNet.from_pretrained(net_type)
+        self.dropout_rate = dropout_rate
+
+    def forward(self, batch_dict):
+        points = batch_dict['points']
+        cp_points = batch_dict['cp_points']
+        color_fea = torch.zeros(points.shape[0], 6).to(points.device) #(N, 6)
+        images = ['Placeholder']
+        batch_size = batch_dict['batch_size']
+        for i in range(5):
+            images.extend([batch_dict["image_{}".format(i)]])
+
+        for batch_id in range(batch_size):
+            batch_flag = cp_points[:,0] == batch_id
+            for im_id in range(1, 6):
+                #For a specific image, handle coordinates corresponding to it.
+                h, w, _ = images[im_id][batch_id].size()
+                im_flag = torch.logical_and(batch_flag, cp_points[:,1] == im_id)
+                x = cp_points[im_flag, 2].long()
+                y = cp_points[im_flag, 3].long()
+                x = torch.clamp(x, 0, w-1)
+                y = torch.clamp(y, 0, h-1)
+                color_fea[im_flag.nonzero(), torch.arange(0, 3)] = images[im_id][batch_id][y, x]
+
+                im_flag = torch.logical_and(batch_flag, cp_points[:,4] == im_id)
+                x = cp_points[im_flag, 5].long()
+                y = cp_points[im_flag, 6].long()
+                x = torch.clamp(x, 0, w-1)
+                y = torch.clamp(y, 0, h-1)
+                color_fea[im_flag.nonzero(), torch.arange(3, 6)] = images[im_id][batch_id][y, x]
+        color_fea = torch.maximum(color_fea[:, 0:3], color_fea[:, 3:6])
+        batch_dict['points'] = torch.cat([batch_dict['points'], color_fea], axis=1)
+        return batch_dict
 
 class VoxelSetAbstraction(nn.Module):
     def __init__(self, model_cfg, voxel_size, point_cloud_range, num_bev_features=None,
@@ -47,6 +85,9 @@ class VoxelSetAbstraction(nn.Module):
         self.model_cfg = model_cfg
         self.voxel_size = voxel_size
         self.point_cloud_range = point_cloud_range
+        self.color_fea_extractor = ImageFeatureExtractor()
+
+        num_rawpoint_features += 3
 
         SA_cfg = self.model_cfg.SA_LAYER
 
@@ -174,6 +215,7 @@ class VoxelSetAbstraction(nn.Module):
             point_coords: (N, 4)
 
         """
+        batch_dict = self.color_fea_extractor(batch_dict)
         keypoints = self.get_sampled_points(batch_dict)
 
         point_features_list = []
