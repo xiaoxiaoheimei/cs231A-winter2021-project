@@ -89,8 +89,6 @@ class EfficientNetFeature(nn.Module):
             def hook(model, input, out):
                 self.activation[name] = out
             return hook
-        #self.eff_net._blocks[2]._project_conv.register_forward_hook(get_activation("conv_2"))
-        #self.eff_net._blocks[7]._project_conv.register_forward_hook(get_activation("conv_7"))
         self.scale = {"conv_2": 0.5, "conv_7": 0.25}
         self.eff_feature = nn.Sequential(self.eff_net._conv_stem, 
                                            self.eff_net._bn0, 

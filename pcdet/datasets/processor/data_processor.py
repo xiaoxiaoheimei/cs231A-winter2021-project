@@ -4,6 +4,68 @@ import numpy as np
 
 from ...utils import box_utils, common_utils
 
+import pdb
+
+def bilinear_interpolate_numpy(im, x, y):
+    """
+    Args:
+        im: (H, W, C) [y, x]
+        x: (N)
+        y: (N)
+
+    Returns:
+
+    """
+    x0 = np.floor(x).astype(int)
+    x1 = x0 + 1
+
+    y0 = np.floor(y).astype(int)
+    y1 = y0 + 1
+
+    x0 = np.clip(x0, 0, im.shape[1] - 1)
+    x1 = np.clip(x1, 0, im.shape[1] - 1)
+    y0 = np.clip(y0, 0, im.shape[0] - 1)
+    y1 = np.clip(y1, 0, im.shape[0] - 1)
+
+    Ia = im[y0, x0]
+    Ib = im[y1, x0]
+    Ic = im[y0, x1]
+    Id = im[y1, x1]
+
+    wa = (x1 - x) * (y1 - y)
+    wb = (x1 - x) * (y - y0)
+    wc = (x - x0) * (y1 - y)
+    wd = (x - x0) * (y - y0)
+    ans = Ia * wa.reshape(-1,1) + Ib * wb.reshape(-1,1) + Ic * wc.reshape(-1,1) + Id * wd.reshape(-1,1)
+    return ans
+
+
+def get_color(batch_dict):
+    points = batch_dict['points']
+    cp_points = batch_dict['cp_points']
+    color_fea = np.zeros((points.shape[0],6)) #(N, 6)
+    images = ['Placeholder']
+    image_scales = ['Placeholder']
+    for i in range(5):
+        image_name = "image_{}".format(i)
+        images.append(batch_dict[image_name].numpy())
+        image_scales.append(batch_dict[image_name+"_scale"])
+
+    for im_id in range(1, 6):
+        #For a specific image, handle coordinates corresponding to it.
+        x_mul, y_mul = image_scales[im_id]
+        im_flag = cp_points[:,0] == im_id
+        x = cp_points[im_flag, 1] * x_mul
+        y = cp_points[im_flag, 2] * y_mul
+        fea = bilinear_interpolate_numpy(images[im_id].transpose(1,2,0), x, y)
+        color_fea[im_flag, 0:3] = fea
+        im_flag = cp_points[:,3] == im_id
+        x = cp_points[im_flag, 4] * x_mul
+        y = cp_points[im_flag, 5] * y_mul
+        fea = bilinear_interpolate_numpy(images[im_id].transpose(1,2,0), x, y)
+        color_fea[im_flag, 3:6] = fea
+    color_fea = color_fea[:, 0:3] + color_fea[:, 3:6]
+    return color_fea
 
 class DataProcessor(object):
     def __init__(self, processor_configs, point_cloud_range, training):
@@ -61,6 +123,8 @@ class DataProcessor(object):
             return partial(self.transform_points_to_voxels, voxel_generator=voxel_generator)
 
         points = data_dict['points']
+        color = get_color(data_dict)
+        points = np.concatenate([points, color], axis=1)
         voxel_output = voxel_generator.generate(points)
         if isinstance(voxel_output, dict):
             voxels, coordinates, num_points = \
