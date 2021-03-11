@@ -7,6 +7,8 @@ from ....utils import common_utils
 
 from efficientnet_pytorch import EfficientNet
 
+import pdb
+
 
 def bilinear_interpolate_torch(im, x, y):
     """
@@ -78,6 +80,82 @@ class ImageFeatureExtractor(nn.Module):
         batch_dict['points'] = torch.cat([batch_dict['points'], color_fea], axis=1)
         return batch_dict
 
+class EfficientNetFeature(nn.Module):
+    def __init__(self, net_type = 'efficientnet-b5', output_channel=6, dropout_rate = 0.2):
+        super(EfficientNetFeature, self).__init__()
+        self.eff_net = EfficientNet.from_pretrained(net_type)
+        self.activation = {}
+        def get_activation(name):
+            def hook(model, input, out):
+                self.activation[name] = out
+            return hook
+        #self.eff_net._blocks[2]._project_conv.register_forward_hook(get_activation("conv_2"))
+        #self.eff_net._blocks[7]._project_conv.register_forward_hook(get_activation("conv_7"))
+        self.scale = {"conv_2": 0.5, "conv_7": 0.25}
+        self.eff_feature = nn.Sequential(self.eff_net._conv_stem, 
+                                           self.eff_net._bn0, 
+                                           self.eff_net._blocks[0], 
+                                           self.eff_net._blocks[1],
+                                           self.eff_net._blocks[2],
+                                           self.eff_net._blocks[3],
+                                           self.eff_net._blocks[4],
+                                           self.eff_net._blocks[5],
+                                           self.eff_net._blocks[6],
+                                           self.eff_net._blocks[7]
+                                          )
+        self.eff_feature[4]._project_conv.register_forward_hook(get_activation("conv_2"))
+        self.eff_feature[9]._project_conv.register_forward_hook(get_activation("conv_7"))
+        self.dropout_rate = dropout_rate
+        self.proj = nn.Linear(64, output_channel)
+
+    def forward(self, batch_dict):
+        #pdb.set_trace()
+        points = batch_dict['points']
+        cp_points = batch_dict['cp_points']
+        eff_fea = torch.zeros(points.shape[0], 12).to(points.device) #(N, 6)
+        image_features = {}
+        image_features["conv_2"] = ['Placeholder']
+        image_features["conv_7"] = ['Placeholder']
+        batch_size = batch_dict['batch_size']
+        image_scales = ['Placeholder']
+        for i in range(0, 5):
+            image_name = "image_{}".format(i)
+            self.eff_feature(batch_dict[image_name])
+            image_features["conv_2"].append(self.activation["conv_2"])
+            image_features["conv_7"].append(self.activation["conv_7"])
+            image_scales.append(batch_dict[image_name+"_scale"])
+
+        for batch_id in range(batch_size):
+            batch_flag = cp_points[:,0] == batch_id
+            for im_id in range(1, 6):
+                #For a specific image, handle coordinates corresponding to it.
+                x_mul, y_mul = image_scales[im_id][batch_id]
+                scale_features = []
+                im_flag = torch.logical_and(batch_flag, cp_points[:,1] == im_id)
+                for layer_name in ["conv_2", "conv_7"]:
+                    fea_map = image_features[layer_name][im_id][batch_id].permute(1,2,0)
+                    x = cp_points[im_flag, 2] * x_mul * self.scale[layer_name]
+                    y = cp_points[im_flag, 3] * y_mul * self.scale[layer_name]
+                    fea = bilinear_interpolate_torch(fea_map, x, y)
+                    scale_features.append(fea)
+                view1_feature = torch.cat(scale_features, axis=1)
+                eff_fea[im_flag.nonzero(), torch.arange(0, 6)] = self.proj(view1_feature)
+
+                scale_features = []
+                im_flag = torch.logical_and(batch_flag, cp_points[:,4] == im_id)
+                for layer_name in ["conv_2", "conv_7"]:
+                    fea_map = image_features[layer_name][im_id][batch_id].permute(1,2,0)
+                    x = cp_points[im_flag, 5] * x_mul * self.scale[layer_name]
+                    y = cp_points[im_flag, 6] * y_mul * self.scale[layer_name]
+                    fea = bilinear_interpolate_torch(fea_map, x, y)
+                    scale_features.append(fea)
+                view2_feature = torch.cat(scale_features, axis=1)
+                eff_fea[im_flag.nonzero(), torch.arange(6, 12)] = self.proj(view2_feature)
+        eff_fea = eff_fea[:, 0:6] + eff_fea[:, 6:12]
+        batch_dict['points'] = torch.cat([batch_dict['points'], eff_fea], axis=1)
+        return batch_dict
+
+
 class VoxelSetAbstraction(nn.Module):
     def __init__(self, model_cfg, voxel_size, point_cloud_range, num_bev_features=None,
                  num_rawpoint_features=None, **kwargs):
@@ -85,9 +163,9 @@ class VoxelSetAbstraction(nn.Module):
         self.model_cfg = model_cfg
         self.voxel_size = voxel_size
         self.point_cloud_range = point_cloud_range
-        self.color_fea_extractor = ImageFeatureExtractor()
+        self.color_fea_extractor = EfficientNetFeature()
 
-        num_rawpoint_features += 3
+        num_rawpoint_features += 6
 
         SA_cfg = self.model_cfg.SA_LAYER
 

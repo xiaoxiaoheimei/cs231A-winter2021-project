@@ -15,8 +15,12 @@ from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, common_utils
 from ..dataset import DatasetTemplate
 import h5py
+import torchvision.transforms as transforms
 
 import pdb
+
+mean = torch.Tensor((0.485, 0.456, 0.406))
+stdv = torch.Tensor((0.229, 0.224, 0.225))
 
 class WaymoDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
@@ -30,6 +34,9 @@ class WaymoDataset(DatasetTemplate):
 
         self.infos = []
         self.include_waymo_data(self.mode)
+        self.target_width = 456
+        self.target_height = 456
+        self.preprocess = transforms.Compose([transforms.ToTensor(), transforms.Resize((self.target_height, self.target_width)), transforms.Normalize(mean, stdv)])
 
     def set_split(self, split):
         super().__init__(
@@ -118,7 +125,10 @@ class WaymoDataset(DatasetTemplate):
             image_info['cp_points'] = f['cp_points'][:][NLZ_flag == -1]
             for image_id in range(5):
                 image_name = 'image_{}'.format(image_id)
-                image_info[image_name] = f[image_name][:]
+                img = f[image_name][:]
+                h, w, _ = img.shape
+                image_info[image_name+'_scale'] = np.array([self.target_width*1./w, self.target_height*1./h])
+                image_info[image_name] = self.preprocess(img)
         #print("image_file:{}, cp_points.shape:{}".format(image_file, image_info['cp_points'].shape))
         return image_info
 
