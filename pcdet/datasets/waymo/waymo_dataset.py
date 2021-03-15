@@ -294,7 +294,7 @@ class WaymoDataset(DatasetTemplate):
             pc_info = info['point_cloud']
             sequence_name = pc_info['lidar_sequence']
             sample_idx = pc_info['sample_idx']
-            points = self.get_lidar(sequence_name, sample_idx)
+            points = self.get_lidar(sequence_name, sample_idx)[0]
 
             annos = info['annos']
             names = annos['name']
@@ -302,7 +302,6 @@ class WaymoDataset(DatasetTemplate):
             gt_boxes = annos['gt_boxes_lidar']
 
             num_obj = gt_boxes.shape[0]
-
             box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
                 torch.from_numpy(points[:, 0:3]).unsqueeze(dim=0).float().cuda(),
                 torch.from_numpy(gt_boxes[:, 0:7]).unsqueeze(dim=0).float().cuda()
@@ -344,6 +343,7 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
 
     train_filename = save_path / ('waymo_infos_%s.pkl' % train_split)
     val_filename = save_path / ('waymo_infos_%s.pkl' % val_split)
+    '''
 
     print('---------------Start to generate data infos---------------')
 
@@ -366,6 +366,7 @@ def create_waymo_infos(dataset_cfg, class_names, data_path, save_path,
     with open(val_filename, 'wb') as f:
         pickle.dump(waymo_infos_val, f)
     print('----------------Waymo info val file is saved to %s----------------' % val_filename)
+    '''
 
     print('---------------Start create groundtruth database for data augmentation---------------')
     dataset.set_split(train_split)
@@ -384,7 +385,6 @@ if __name__ == '__main__':
     parser.add_argument('--func', type=str, default='create_waymo_infos', help='')
     args = parser.parse_args()
 
-    pdb.set_trace()
 
     if args.func == 'create_waymo_infos':
         import yaml
@@ -394,8 +394,8 @@ if __name__ == '__main__':
         create_waymo_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Vehicle', 'Pedestrian', 'Cyclist'],
-            data_path=ROOT_DIR / 'data_source_test' / 'waymo',
-            save_path=ROOT_DIR / 'data_test' / 'waymo',
+            data_path=ROOT_DIR / 'data_source' / 'waymo',
+            save_path=ROOT_DIR / 'data' / 'waymo',
             raw_data_tag='raw_data',
             processed_data_tag=dataset_cfg.PROCESSED_DATA_TAG,
         )

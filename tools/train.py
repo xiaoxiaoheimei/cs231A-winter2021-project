@@ -58,7 +58,7 @@ def parse_config():
 
 
 def main():
-    pdb.set_trace()
+    #pdb.set_trace()
     args, cfg = parse_config()
     if args.launcher == 'none':
         dist_train = False
